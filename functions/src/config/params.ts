@@ -3,49 +3,92 @@ import { defineString, defineInt } from "firebase-functions/params";
 
 /**
  * Parâmetros V2 para configuração das funções de Ranking.
- * Os valores padrão são lidos de arquivos .env no deploy,
- * mas podem ser sobrescritos por configuração de runtime ou secrets.
+ * Valores padrão vêm do seu .env no deploy, mas podem ser
+ * sobrescritos em runtime ou via Secret Manager.
  */
 
-// --- Parâmetros Globais / Gatilho ---
-
+// Região de deploy para todas as funções de ranking
 export const RANKING_REGION = defineString("RANKING_REGION", {
   default: "southamerica-east1",
   label: "Região principal para funções de ranking",
-  description: "Define a região onde as funções de gatilho e processamento de tarefas de ranking serão implantadas.",
+  description:
+    "Onde as funções de gatilho e processamento de ranking serão implantadas.",
 });
 
-export const RANKING_TASK_DELAY_SECONDS = defineInt("RANKING_TASK_DELAY_SECONDS", {
-  default: 30, // Mantendo seu valor original
-  label: "Atraso para Enfileirar Tarefa de Ranking (segundos)",
-  description: "Tempo em segundos que o gatilho Firestore aguardará antes de enfileirar a tarefa de atualização.",
+// Delay antes de enfileirar a tarefa de ranking (Firestore → Cloud Tasks)
+export const RANKING_TASK_DELAY_SECONDS = defineInt(
+  "RANKING_TASK_DELAY_SECONDS",
+  {
+    default: 30,
+    label: "Atraso para enfileirar tarefa de ranking (s)",
+    description:
+      "Tempo em segundos que o trigger aguardará antes de enfileirar.",
+  }
+);
+
+// Configuração da fila gerenciada e runtime da função de processamento
+export const RANKING_TASK_RETRY_ATTEMPTS = defineInt(
+  "RANKING_TASK_RETRY_ATTEMPTS",
+  {
+    default: 5,
+    label: "Máximo de retentativas da tarefa",
+    description:
+      "Quantas vezes re-tentar antes de dar fail permanente.",
+  }
+);
+export const RANKING_TASK_MIN_BACKOFF = defineInt(
+  "RANKING_TASK_MIN_BACKOFF",
+  {
+    default: 60,
+    label: "Backoff mínimo (s)",
+    description: "Espera mínima entre falha e nova tentativa.",
+  }
+);
+export const RANKING_TASK_MAX_CONCURRENT = defineInt(
+  "RANKING_TASK_MAX_CONCURRENT",
+  {
+    default: 6,
+    label: "Concorrência máxima",
+    description:
+      "Número máximo de tarefas de ranking simultâneas.",
+  }
+);
+export const RANKING_TASK_TIMEOUT = defineInt(
+  "RANKING_TASK_TIMEOUT",
+  {
+    default: 300,
+    label: "Timeout da tarefa (s)",
+    description: "Tempo máximo de execução da função de ranking.",
+  }
+);
+
+// ————— Parâmetros Pagar.me vindo do .env —————
+
+// Chave da API Pagar.me (ex: sk_test_… ou sk_live_…)
+export const PAGARME_API_KEY = defineString("PAGARME_API_KEY", {
+  default: process.env.PAGARME_API_KEY ?? "",
+  label: "Chave secreta da API Pagar.me",
 });
 
-
-// --- Parâmetros para a Função de Tarefa (onTaskDispatched) ---
-// Estes parâmetros configuram tanto a fila gerenciada no Cloud Tasks
-// quanto o runtime da função 'processRankingUpdateTask'.
-
-export const RANKING_TASK_RETRY_ATTEMPTS = defineInt("RANKING_TASK_RETRY_ATTEMPTS", {
-  default: 5, // Valor do .env
-  label: "Tentativas Máximas da Tarefa de Ranking",
-  description: "Número máximo de vezes que uma tarefa será retentada em caso de falha.",
+// URL base da API v5
+export const PAGARME_BASE_URL = defineString("PAGARME_BASE_URL", {
+  default:
+    process.env.PAGARME_BASE_URL ??
+    "https://api.pagar.me/core/v5",
+  label: "URL base da API Pagar.me v5",
 });
 
-export const RANKING_TASK_MIN_BACKOFF = defineInt("RANKING_TASK_MIN_BACKOFF", {
-  default: 60, // Valor do .env
-  label: "Backoff Mínimo da Tarefa (segundos)",
-  description: "Tempo mínimo de espera (em segundos) antes de uma nova tentativa após falha.",
-});
+// ID da conta Pagar.me (opcional)
+export const PAGARME_ACCOUNT_ID = defineString(
+  "PAGARME_ACCOUNT_ID",
+  {
+    default: process.env.PAGARME_ACCOUNT_ID ?? "",
+    label: "ID da conta Pagar.me",
+  }
+);
 
-export const RANKING_TASK_MAX_CONCURRENT = defineInt("RANKING_TASK_MAX_CONCURRENT", {
-  default: 6, // Valor do .env
-  label: "Despachos Concorrentes Máximos",
-  description: "Número máximo de tarefas de ranking que podem ser executadas simultaneamente.",
-});
-
-export const RANKING_TASK_TIMEOUT = defineInt("RANKING_TASK_TIMEOUT", {
-  default: 300, // Valor do .env
-  label: "Timeout da Função de Tarefa (segundos)",
-  description: "Tempo máximo (em segundos) permitido para a execução da função de processamento de tarefa.",
+// Timeout para requisições (ms)
+export const PAGARME_TIMEOUT = defineInt("PAGARME_TIMEOUT", {
+  default: parseInt(process.env.PAGARME_TIMEOUT ?? "5000", 10),
+  label: "Timeout Pagar.me (ms)",
 });

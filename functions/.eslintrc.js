@@ -43,6 +43,10 @@ module.exports = {
     "valid-jsdoc": "off",
     "import/no-unresolved": "off",
     "prefer-const": "off",
-    "no-irregular-whitespace": "off"
+    "no-irregular-whitespace": "off",
+    "no-var-requires": "off",
+    "no-unused-vars": "off",
+    "no-undef": "off",
+    "no-inferrable-types": "off",
   },
 };
