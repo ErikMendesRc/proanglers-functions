@@ -92,3 +92,13 @@ export const PAGARME_TIMEOUT = defineInt("PAGARME_TIMEOUT", {
   default: parseInt(process.env.PAGARME_TIMEOUT ?? "5000", 10),
   label: "Timeout Pagar.me (ms)",
 });
+
+export const PLATFORM_RECIPIENT_ID = defineString("PLATFORM_RECIPIENT_ID", {
+  default: process.env.PLATFORM_RECIPIENT_ID ?? "",
+  label: "Recebedor da plataforma",
+});
+
+export const PLATFORM_FEE_PERCENTAGE = defineString("PLATFORM_FEE_PERCENTAGE", {
+  default: process.env.PLATFORM_FEE_PERCENTAGE ?? "",
+  label: "Taxa da plataforma (%)",
+});
