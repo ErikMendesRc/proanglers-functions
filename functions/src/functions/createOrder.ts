@@ -55,7 +55,6 @@ export const createOrder = onCall<CreateOrderPlatformRequestDto>(
         "installments obrigatórios para cartão."
       );
 
-    // 1️⃣ marcação de 10% sobre cada item
     const feePct = Number(PLATFORM_FEE_PERCENTAGE.value());
     const itemsWithFee = items.map((it) => ({
       ...it,
@@ -69,7 +68,6 @@ export const createOrder = onCall<CreateOrderPlatformRequestDto>(
     );
     const platformFeeTotal = totalWithFee - baseTotal;
 
-    // recipient dinâmico (dono do torneio)
     const userSnap = await db.collection("users").doc(uid).get();
     const ownerRid = userSnap.get("recipientId") as string;
     if (!ownerRid)
@@ -99,7 +97,6 @@ export const createOrder = onCall<CreateOrderPlatformRequestDto>(
       },
     ];
 
-    // monta o payment genérico
     let payment: any;
     if (method === "pix") {
       payment = {
@@ -111,7 +108,6 @@ export const createOrder = onCall<CreateOrderPlatformRequestDto>(
         split: splitRules,
       };
     } else {
-      // cartão
       payment = {
         payment_method: "credit_card" as const,
         credit_card: {
@@ -124,7 +120,6 @@ export const createOrder = onCall<CreateOrderPlatformRequestDto>(
       };
     }
 
-    // payload final
     const payload: PagarmeV5OrderPayload = {
       code: method === "credit_card" ? code : undefined,
       items: itemsWithFee,
@@ -133,7 +128,6 @@ export const createOrder = onCall<CreateOrderPlatformRequestDto>(
       closed: method === "credit_card" ? true : undefined,
     };
 
-    // chamada ao Pagar.me
     const apiKey = PAGARME_API_KEY.value(),
       baseUrl = PAGARME_BASE_URL.value();
     if (!apiKey || !baseUrl)
@@ -152,7 +146,6 @@ export const createOrder = onCall<CreateOrderPlatformRequestDto>(
       throw new HttpsError("internal", msg);
     }
 
-    // retorna campos relevantes
     const tx = resp.charges[0]?.last_transaction || {};
     return {
       orderId: resp.id,

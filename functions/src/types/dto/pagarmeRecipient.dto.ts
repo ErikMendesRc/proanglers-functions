@@ -120,5 +120,4 @@ export interface PagarmeV5RecipientResponse {
 }
 
 // DTO usado pela função onCall
-export interface CreateRecipientPlatformRequestDto
-  extends PagarmeV5CreateRecipientPayload {}
+export type CreateRecipientPlatformRequestDto = PagarmeV5CreateRecipientPayload;

@@ -11,5 +11,4 @@ export interface PagarmeV5KycLinkResponse {
 }
 
 // Interface de entrada da função onCall
-export interface CreateRecipientKycPlatformRequestDto
-  extends PagarmeV5CreateKycPayload {}
+export type CreateRecipientKycPlatformRequestDto = PagarmeV5CreateKycPayload;

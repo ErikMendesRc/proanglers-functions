@@ -35,13 +35,13 @@ export const createCardToken = onCall<CreateTokenPlatformRequestDto>(
     lastFour: string;
     brand: string;
   }> => {
-    // 1️⃣ Autenticação
+    //Autenticação
     const uid = request.auth?.uid;
     if (!uid) {
       throw new HttpsError("unauthenticated", "Usuário não autenticado.");
     }
 
-    // 2️⃣ Validação dos dados do cartão
+    //Validação dos dados do cartão
     const { number, holderName, expMonth, expYear, cvv, label } =
       request.data ?? {};
     if (
@@ -57,7 +57,7 @@ export const createCardToken = onCall<CreateTokenPlatformRequestDto>(
       );
     }
 
-    // 3️⃣ Instancia Pagar.me token service
+    //Instancia Pagar.me token service
     const apiKey = PAGARME_API_KEY.value();
     const baseUrl = PAGARME_BASE_URL.value();
     if (!apiKey || !baseUrl) {
@@ -70,7 +70,7 @@ export const createCardToken = onCall<CreateTokenPlatformRequestDto>(
     const pagarmeClient = new PagarmeApiClient(apiKey, baseUrl);
     const tokenService = new PagarmeTokenService(pagarmeClient);
 
-    // 4️⃣ Monta payload para /tokens
+    //Monta payload para /tokens
     const tokenPayload: PagarmeV5CreateTokenPayload = {
       type: "card",
       card: {
@@ -83,7 +83,7 @@ export const createCardToken = onCall<CreateTokenPlatformRequestDto>(
       },
     };
 
-    // 5️⃣ Chama API Pagar.me (/tokens)
+    //Chama API Pagar.me (/tokens)
     let tokenResp: PagarmeV5TokenResponse;
     try {
       tokenResp = await tokenService.createCardToken(tokenPayload);
@@ -99,7 +99,7 @@ export const createCardToken = onCall<CreateTokenPlatformRequestDto>(
       );
     }
 
-    // 6️⃣ Atualiza Firestore (somente token e 4 últimos dígitos)
+    //Atualiza Firestore (somente token e 4 últimos dígitos)
     const userRef = db.collection("users").doc(uid);
     await userRef.set(
       {
@@ -109,7 +109,7 @@ export const createCardToken = onCall<CreateTokenPlatformRequestDto>(
       { merge: true }
     );
 
-    // 7️⃣ Retorna dados essenciais ao frontend
+    //Retorna dados essenciais ao frontend
     return {
       tokenId: tokenResp.id,
       lastFour: tokenResp.card.last_four_digits,
