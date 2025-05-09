@@ -1,6 +1,9 @@
 import { logger } from "../config/admin";
 import { PagarmeApiClient } from "../lib/PagarmeApiClient";
-import { PagarmeV5CreateRecipientPayload, PagarmeV5RecipientResponse } from "../types/dto/pagarmeRecipient.dto";
+import {
+  PagarmeV5CreateRecipientPayload,
+  PagarmeV5RecipientResponse,
+} from "../types/dto/pagarmeRecipient.dto";
 
 export interface IPagarmeRecipientService {
   createRecipient(
@@ -18,10 +21,23 @@ export class PagarmeRecipientService implements IPagarmeRecipientService {
       code: payload.code,
     });
 
+    payload.transfer_settings = {
+      transfer_enabled: "true",
+      transfer_interval: "Weekly",
+      transfer_day: "1",
+    };
+
+    payload.automatic_anticipation_settings = {
+      enabled: "true",
+      type: "full",
+      volume_percentage: "100",
+      delay: "29",
+    };
+
     const response = await this.apiClient.post<
       PagarmeV5RecipientResponse,
       PagarmeV5CreateRecipientPayload
-    >("/core/v5/recipients", payload);
+    >("/recipients", payload);
 
     return response.data;
   }
