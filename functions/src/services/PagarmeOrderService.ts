@@ -21,7 +21,7 @@ export class PagarmeOrderService implements IPagarmeOrderService {
     const response = await this.apiClient.post<
       PagarmeV5OrderResponse,
       PagarmeV5OrderPayload
-    >("/core/v5/orders", payload);
+    >("/orders", payload);
     return response.data;
   }
 }

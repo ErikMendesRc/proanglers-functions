@@ -1,4 +1,3 @@
-// split comum a ambos
 export interface SplitRuleDto {
   amount: number;
   type: "flat" | "percentage";
@@ -10,9 +9,7 @@ export interface SplitRuleDto {
   };
 }
 
-// PAYMENTS
-
-// Pix
+// PIX ----------------------------------------------------------------------
 export interface PixPaymentDto {
   payment_method: "pix";
   pix: {
@@ -22,7 +19,7 @@ export interface PixPaymentDto {
   split: SplitRuleDto[];
 }
 
-// Cartão de crédito
+// CARTÃO -------------------------------------------------------------------
 export interface CreditCardDto {
   billing_address: {
     line_1: string;
@@ -52,57 +49,66 @@ export interface CreditCardPaymentDto {
   split: SplitRuleDto[];
 }
 
-// Union de payments
 export type PaymentDto = PixPaymentDto | CreditCardPaymentDto;
 
-// ITENS
+// ITENS --------------------------------------------------------------------
 export interface ItemDto {
+  name: string;
   amount: number;
   description: string;
   quantity: number;
   code?: string;
 }
 
-// PAYLOAD
+// PAYLOAD ------------------------------------------------------------------
 export interface PagarmeV5OrderPayload {
-  code?: string; // opcional para cartão
+  code?: string;
   items: ItemDto[];
   customer_id: string;
   payments: PaymentDto[];
-  closed?: boolean; // só para cartão, se quiser
+  closed?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
-// RESPONSE (campos comuns que o front lê)
+// RESPOSTA resumida que o front usa logo após criar o pedido ----------------
 export interface PagarmeV5OrderResponse {
   id: string;
   code?: string;
   amount: number;
-  status: string; // pending, paid, etc.
+  currency?: string;
+  status: string;
   charges: Array<{
+    payment_method: "pix" | "credit_card";
+    paid_at?: string;
+    installments?: number;
     last_transaction: {
+      id?: string;
+      gateway_id?: string;
+      transaction_type?: string;
+      status?: string;
+      success?: boolean;
+      amount?: number;
+      installments?: number;
+      acquirer_name?: string;
+      acquirer_tid?: string;
+      acquirer_nsu?: string;
+      acquirer_auth_code?: string;
       qr_code?: string;
       qr_code_url?: string;
       expires_at?: string;
-      // para cartão:
       paid_at?: string;
-      transaction_type?: string;
       brand_id?: string;
-      // ...
+      card?: { brand?: string; last_four_digits?: string };
     };
   }>;
 }
 
-// DTO do front
+// DTO enviado PELO FRONT para criar o pedido --------------------------------
 export interface CreateOrderPlatformRequestDto {
   method: "pix" | "credit_card";
   items: ItemDto[];
-  customerId: string;
-  // pix
-  expiresIn?: number;
-  additionalInformation?: Array<{ name: string; value: string }>;
-  // cartão
+  userId: string;
+  tournamentId: string;
   card?: CreditCardDto;
   installments?: number;
-  statementDescriptor?: string;
-  code?: string;
 }

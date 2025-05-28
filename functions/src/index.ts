@@ -9,6 +9,7 @@ import { createCardToken } from "./functions/createCardToken";
 import { createRecipient } from "./functions/createRecipient";
 import { createRecipientKyc } from "./functions/createRecipientKyc";
 import { createOrder } from "./functions/createOrder";
+import { orderWebhook } from "./functions/orderWebhook";
 
 export { onCatchWriteEnqueueUpdate };
 export { onTournamentFinalizedUpdateNational };
@@ -19,3 +20,4 @@ export { createCardToken };
 export { createRecipient };
 export { createRecipientKyc };
 export { createOrder };
+export { orderWebhook };

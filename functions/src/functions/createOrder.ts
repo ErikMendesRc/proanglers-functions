@@ -1,21 +1,23 @@
-// src/functions/createOrder.ts
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger, db } from "../config/admin";
+import { PAGARME_API_KEY, PAGARME_BASE_URL } from "../config/params";
 import { PagarmeApiClient } from "../lib/PagarmeApiClient";
-import {
-  PAGARME_API_KEY,
-  PAGARME_BASE_URL,
-  PLATFORM_RECIPIENT_ID,
-  PLATFORM_FEE_PERCENTAGE,
-} from "../config/params";
 import { PagarmeOrderService } from "../services/PagarmeOrderService";
 import {
   CreateOrderPlatformRequestDto,
-  PagarmeV5OrderPayload,
   PagarmeV5OrderResponse,
-  SplitRuleDto,
 } from "../types/dto/pagarmeOrder.dto";
+import { PaymentCalculator } from "../utils/PaymentCalculator";
+import {
+  OrderBuildContext,
+  PagarmeOrderPayloadBuilder,
+} from "../builders/orderPayloadBuilder";
+import { initialFromPagarme } from "../mappers/orderMapper";
+import { OrderDto } from "../types/dto/orderSummary.dto";
 
+/**
+ * Callable – cria pedido na Pagar.me e grava rascunho no Firestore
+ */
 export const createOrder = onCall<CreateOrderPlatformRequestDto>(
   {
     region: "southamerica-east1",
@@ -23,130 +25,114 @@ export const createOrder = onCall<CreateOrderPlatformRequestDto>(
     timeoutSeconds: 30,
   },
   async (request): Promise<any> => {
+    /* ---------------- Validação & Auth ---------------- */
     const uid = request.auth?.uid;
-    if (!uid)
-      throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+    if (!uid) throw new HttpsError("unauthenticated", "Usuário não autenticado.");
 
     const {
       method,
       items,
-      customerId,
-      expiresIn = 7200,
-      additionalInformation = [],
+      tournamentId,
       card,
-      installments,
-      statementDescriptor,
-      code,
-    } = request.data ?? {};
+      installments = 1,
+    } = request.data ?? ({} as Partial<CreateOrderPlatformRequestDto>);
 
-    if (!["pix", "credit_card"].includes(method))
+    if (!tournamentId || !items?.length)
+      throw new HttpsError("invalid-argument", "Campos obrigatórios: items[], tournamentId.");
+
+    if (!["pix", "credit_card"].includes(method as string))
+      throw new HttpsError("invalid-argument", "method deve ser 'pix' ou 'credit_card'.");
+
+    if (
+      method === "credit_card" &&
+      (installments < 1 || installments > PaymentCalculator.MAX_INSTALLMENTS)
+    ) {
       throw new HttpsError(
         "invalid-argument",
-        "method deve ser 'pix' ou 'credit_card'."
+        `installments deve ser entre 1 e ${PaymentCalculator.MAX_INSTALLMENTS}.`
       );
-    if (!items?.length || !customerId)
-      throw new HttpsError(
-        "invalid-argument",
-        "Campos obrigatórios: items[], customerId."
-      );
-    if (method === "credit_card" && (installments == null || installments < 1))
-      throw new HttpsError(
-        "invalid-argument",
-        "installments obrigatórios para cartão."
-      );
-
-    const feePct = Number(PLATFORM_FEE_PERCENTAGE.value());
-    const itemsWithFee = items.map((it) => ({
-      ...it,
-      amount: Math.ceil(it.amount * (1 + feePct / 100)),
-    }));
-
-    const baseTotal = items.reduce((s, it) => s + it.amount * it.quantity, 0);
-    const totalWithFee = itemsWithFee.reduce(
-      (s, it) => s + it.amount * it.quantity,
-      0
-    );
-    const platformFeeTotal = totalWithFee - baseTotal;
-
-    const userSnap = await db.collection("users").doc(uid).get();
-    const ownerRid = userSnap.get("recipientId") as string;
-    if (!ownerRid)
-      throw new HttpsError("failed-precondition", "Usuário sem recipientId.");
-
-    const platformRid = PLATFORM_RECIPIENT_ID.value();
-    const splitRules: SplitRuleDto[] = [
-      {
-        amount: baseTotal,
-        recipient_id: ownerRid,
-        type: "flat",
-        options: {
-          liable: true,
-          charge_processing_fee: false,
-          charge_remainder_fee: false,
-        },
-      },
-      {
-        amount: platformFeeTotal,
-        recipient_id: platformRid,
-        type: "flat",
-        options: {
-          liable: false,
-          charge_processing_fee: true,
-          charge_remainder_fee: true,
-        },
-      },
-    ];
-
-    let payment: any;
-    if (method === "pix") {
-      payment = {
-        payment_method: "pix" as const,
-        pix: {
-          expires_in: expiresIn,
-          additional_information: additionalInformation,
-        },
-        split: splitRules,
-      };
-    } else {
-      payment = {
-        payment_method: "credit_card" as const,
-        credit_card: {
-          card: card!,
-          operation_type: "auth_and_capture" as const,
-          installments: installments!,
-          statement_descriptor: statementDescriptor,
-        },
-        split: splitRules,
-      };
     }
 
-    const payload: PagarmeV5OrderPayload = {
-      code: method === "credit_card" ? code : undefined,
-      items: itemsWithFee,
-      customer_id: customerId,
-      payments: [payment],
-      closed: method === "credit_card" ? true : undefined,
+    /* ---------------- Busca dados do comprador ---------------- */
+    const buyerSnap = await db.collection("users").doc(uid).get();
+    const customerId = buyerSnap.get("customerId") as string | undefined;
+    if (!customerId)
+      throw new HttpsError("failed-precondition", "Usuário sem customerId cadastrado.");
+
+    /* ---------------- Busca dados do organizador ---------------- */
+    const tournamentSnap = await db.collection("tournaments").doc(tournamentId).get();
+    const organizerId = tournamentSnap.get("organizerId") as string | undefined;
+    if (!organizerId)
+      throw new HttpsError("failed-precondition", "Torneio sem organizerId definido.");
+
+    const organizerSnap = await db.collection("users").doc(organizerId).get();
+    const ownerRid = organizerSnap.get("recipientId") as string | undefined;
+    if (!ownerRid)
+      throw new HttpsError("failed-precondition", "Organizador sem recipientId definido.");
+
+    /* ---------------- Monta payload para Pagar.me ---------------- */
+    const buildCtx: OrderBuildContext = {
+      buyerCustomerId: customerId,
+      ownerRecipientId: ownerRid,
     };
 
-    const apiKey = PAGARME_API_KEY.value(),
-      baseUrl = PAGARME_BASE_URL.value();
+    const builder = new PagarmeOrderPayloadBuilder(
+      {
+        method,
+        items,
+        userId: uid,
+        tournamentId,
+        card,
+        installments,
+      } as CreateOrderPlatformRequestDto,
+      buildCtx
+    );
+
+    let payload;
+    try {
+      payload = builder.build();
+      // metadados úteis para rastreamento
+      payload.metadata = {
+        firestoreUserId: uid,
+        tournamentId,
+        createdAt: Date.now(),
+      };
+    } catch (err: any) {
+      logger.warn("Payload builder validation failed", { err: err.message });
+      throw new HttpsError("invalid-argument", err.message);
+    }
+
+    /* ---------------- Chama Pagar.me ---------------- */
+    const apiKey = PAGARME_API_KEY.value();
+    const baseUrl = PAGARME_BASE_URL.value();
     if (!apiKey || !baseUrl)
       throw new HttpsError("internal", "Config Pagar.me não definida.");
-    const svc = new PagarmeOrderService(new PagarmeApiClient(apiKey, baseUrl));
+
+    const pagarmeSvc = new PagarmeOrderService(new PagarmeApiClient(apiKey, baseUrl));
 
     let resp: PagarmeV5OrderResponse;
     try {
-      resp = await svc.createOrder(payload);
+      resp = await pagarmeSvc.createOrder(payload);
     } catch (err: any) {
-      logger.error("Erro ao criar pedido", { err, uid });
+      logger.error("Erro ao criar pedido na Pagar.me", err);
       const msg =
-        err?.response?.data?.errors?.[0]?.message ||
-        err.message ||
-        "Falha ao criar pedido.";
+        err?.response?.data?.errors?.[0]?.message || err.message || "Falha ao criar pedido.";
       throw new HttpsError("internal", msg);
     }
 
-    const tx = resp.charges[0]?.last_transaction || {};
+    /* ---------------- Grava rascunho no Firestore ---------------- */
+    try {
+      const fullDoc: OrderDto & { user_id: string; createdAt: any } = initialFromPagarme(resp, {
+        userId: uid,
+        tournamentId,
+      });
+      await db.collection("orders").doc(resp.id).set(fullDoc, { merge: true });
+    } catch (err) {
+      logger.error("Erro ao gravar pedido no Firestore", err);
+    }
+
+    /* ---------------- Resposta ao front ---------------- */
+    const tx = resp.charges?.[0]?.last_transaction ?? {};
     return {
       orderId: resp.id,
       status: resp.status,
@@ -157,7 +143,10 @@ export const createOrder = onCall<CreateOrderPlatformRequestDto>(
             pixQrCodeUrl: tx.qr_code_url,
             expiresAt: tx.expires_at,
           }
-        : { paidAt: tx.paid_at, transactionType: tx.transaction_type }),
+        : {
+            paidAt: tx.paid_at,
+            transactionType: tx.transaction_type,
+          }),
     };
   }
 );
